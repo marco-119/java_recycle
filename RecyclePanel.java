@@ -20,8 +20,9 @@ public class RecyclePanel extends JPanel {
     private int totalPoint = 0;
     private int rowCount = 0;
 
-    private static final String DB_URL_PREFIX = "jdbc:sqlite:";
-    private String DB_FILE;
+    private static final String DB_URL = "jdbc:mysql://223.130.155.245:3306/recycle?serverTimezone=UTC&characterEncoding=UTF-8";
+    private static final String DB_USER = "remote_user";
+    private static final String DB_PASSWORD = "fjf0301!";
 
     private final Map<String, Integer> itemPoints;
     private String userId;
@@ -34,8 +35,6 @@ public class RecyclePanel extends JPanel {
         if (userId == null || userId.trim().isEmpty()) {
             userId = "guest";
         }
-
-        DB_FILE = "recycle_log_" + userId + ".db";
 
         itemPoints = new LinkedHashMap<>();
         itemPoints.put("비닐", 10);
@@ -235,22 +234,27 @@ public class RecyclePanel extends JPanel {
     }
 
     private Connection connect() throws SQLException {
-        return DriverManager.getConnection(DB_URL_PREFIX + DB_FILE);
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            JOptionPane.showMessageDialog(this, "MySQL 드라이버를 찾을 수 없습니다.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
     }
 
     private void initializeDatabase() {
         String createItems =
                 "CREATE TABLE IF NOT EXISTS recycle_items (" +
-                        "item_name TEXT PRIMARY KEY," +
-                        "point INTEGER NOT NULL" +
+                        "item_name VARCHAR(50) PRIMARY KEY," +
+                        "point INT NOT NULL" +
                         ");";
 
         String createLogs =
                 "CREATE TABLE IF NOT EXISTS recycle_logs (" +
-                        "log_id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                        "item_name TEXT NOT NULL," +
-                        "point INTEGER NOT NULL," +
-                        "timestamp TEXT NOT NULL" +
+                        "log_id INT AUTO_INCREMENT PRIMARY KEY," +
+                        "item_name VARCHAR(50) NOT NULL," +
+                        "point INT NOT NULL," +
+                        "timestamp DATETIME NOT NULL" +
                         ");";
 
         try (Connection conn = connect();
@@ -267,7 +271,7 @@ public class RecyclePanel extends JPanel {
             String countSql = "SELECT COUNT(*) AS cnt FROM recycle_items";
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(countSql)) {
-                int cnt = rs.getInt("cnt");
+                int cnt = rs.next() ? rs.getInt("cnt") : 0;
                 if (cnt == 0) {
                     String insertSql = "INSERT INTO recycle_items(item_name, point) VALUES(?, ?)";
                     try (PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
