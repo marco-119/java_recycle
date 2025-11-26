@@ -251,15 +251,11 @@ public class UsersDAO {
             rs = pstmt.executeQuery();
 
             while (rs.next()) {
-                UsersDTO user = new UsersDTO(
-                    rs.getString("user_id"),
-                    rs.getString("nickname"),
-                    null, // 랭킹 보여줄 때 비번은 필요 없으므로 null 또는 빈칸
-                    rs.getInt("total_points"),
-                    rs.getInt("balance_points"),
-                    rs.getInt("attendance_streak"),
-                    rs.getBoolean("is_admin")
-                );
+                UsersDTO user = new UsersDTO();
+                		
+                user.setNickname(rs.getString("nickname"));
+                user.setTotalPoints(rs.getInt("total_points"));
+                
                 rankList.add(user);
             }
         } catch (SQLException e) {
