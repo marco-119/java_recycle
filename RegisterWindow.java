@@ -7,9 +7,6 @@ import java.awt.event.*;
 import recycle.DAO.UsersDAO; // DAO 임포트
 import recycle.DTO.UsersDTO; // DTO 임포트
 
-/**
- * 회원가입 GUI 창 (이미지 기반)
- */
 public class RegisterWindow extends JFrame implements ActionListener {
 
     private JTextField nicknameField, userIdField;
