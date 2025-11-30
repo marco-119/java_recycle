@@ -70,7 +70,7 @@ public class UsersDAO {
     }
     
     // ---------------------------------------------------------------
-    // 2. 중복 체크 (isIdExists) - SELECT
+    // 2. 아이디 중복 체크 (isIdExists) - SELECT
     // ---------------------------------------------------------------
     public boolean isIdExists(String userId) {
         boolean exists = false;
@@ -165,7 +165,7 @@ public class UsersDAO {
     }
     
     // ---------------------------------------------------------------
-    // 5. 퀴즈/출석체크 결과 저장 (updateQuizResult)
+    // 5. 퀴즈/출석체크 결과 저장 (updateQuizResult) - UPDATE
     // ---------------------------------------------------------------
     public void updateQuizResult(UsersDTO user) {
         Connection conn = null;
