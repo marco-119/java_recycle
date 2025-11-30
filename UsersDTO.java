@@ -70,7 +70,7 @@ public class UsersDTO {
         this.isAdmin = isAdmin;
     }
     
-    //디버깅용
+    // 디버깅용
     @Override
     public String toString() {
         return "UsersDTO [아이디=" + userId + ", 닉네임=" + nickname + ", 잔액=" + balancePoints + ", 관리자=" + isAdmin + "]";
