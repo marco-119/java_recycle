@@ -3,16 +3,16 @@ package recycle.DTO;
 public class ItemsDTO {
     private String itemId;
     private String itemName;
-    private String disposalGuide;
     private String categoryId;
+    private String disposalGuide;
     
     public ItemsDTO() { }
     
-    public ItemsDTO(String itemId, String itemName, String disposalGuide, String categoryId) {
+    public ItemsDTO(String itemId, String itemName, String categoryId, String disposalGuide) {
         this.itemId = itemId;
         this.itemName = itemName;
-        this.disposalGuide = disposalGuide;
         this.categoryId = categoryId;
+        this.disposalGuide = disposalGuide;
     }
     
     public String getItemId() {
@@ -29,18 +29,18 @@ public class ItemsDTO {
         this.itemName = itemName;
     }
     
-    public String getDisposalGuide() {
-        return disposalGuide;
-    }
-    public void setDisposalGuide(String disposalGuide) {
-        this.disposalGuide = disposalGuide;
-    }
-    
     public String getCategoryId() {
         return categoryId;
     }
     public void setCategoryId(String categoryId) {
         this.categoryId = categoryId;
+    }
+    
+    public String getDisposalGuide() {
+        return disposalGuide;
+    }
+    public void setDisposalGuide(String disposalGuide) {
+        this.disposalGuide = disposalGuide;
     }
 
     @Override
