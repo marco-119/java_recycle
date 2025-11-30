@@ -43,10 +43,11 @@ public class ItemsDTO {
         this.disposalGuide = disposalGuide;
     }
 
-    //디버깅용
+    // 디버깅용
     @Override
     public String toString() {
         return "ItemsDTO [품목번호=" + itemId + ", 품목명=" + itemName + ", 분류번호=" + categoryId + "]";
     }
 }
+
 
