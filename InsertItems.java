@@ -143,7 +143,7 @@ public class InsertItems {
             }
             
             System.out.println("--------------------------------");
-            System.out.println("총 " + count + "개의 품목이 DB에 저장되었습니다!");
+            System.out.println("총 " + count + "개의 품목이 DB에 저장되었습니다");
 
         } catch (java.sql.SQLIntegrityConstraintViolationException e) {
             System.out.println("중복된 데이터가 있거나, 분류ID가 없습니다.");
