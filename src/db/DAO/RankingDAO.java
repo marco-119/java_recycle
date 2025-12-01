@@ -7,9 +7,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
-// [가정] db 패키지에 있는 RecycleDB를 import 합니다. (DB 연결 유틸리티)
 import db.RecycleDB;
-// db.DTO 패키지에 있는 RankingDTO를 import 합니다.
 import db.DTO.RankingDTO; 
 
 

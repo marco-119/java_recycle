@@ -1,262 +1,640 @@
 package recycle;
 
 import javax.swing.*;
+import javax.swing.border.CompoundBorder; 
+import javax.swing.border.EmptyBorder;    
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.sql.SQLException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.util.Map;
+import java.util.Set; 
+import java.util.HashSet; 
+import java.util.Random; 
+import java.util.stream.Collectors;
+import java.sql.SQLException;
 
+import javax.swing.text.DefaultCaret; // ⭐ 추가된 import
 
-import db.DAO.UserDAO;
-import db.DAO.RecycleLogDAO; 
-
+import db.DTO.UserDTO;
+import db.DAO.RecycleLogDAO;
+import db.DAO.GuideDAO;
+import db.DAO.GuideDAO.ItemDetail;
 
 public class QuizPanel extends JPanel {
+
+    private final UserDTO currentUser;
+    private final RecycleLogDAO logDAO;
+    private final int QUIZ_REWARD_POINTS = 50; 
+    private static final int QUIZ_COUNT = 5; 
 
     private JLabel questionLabel;
     private JPanel quizGrid;
     private JLabel messageLabel;
+    
+
+    private JEditorPane guideDisplayArea; 
+    private JScrollPane guideScrollPane; 
+    private JLabel questionImageLabel; 
 
     private List<Quiz> quizList;
     private int currentQuizIndex = 0;
     private int correctCount = 0;
+    private boolean answerSubmitted = false;
+    private final Random random = new Random(); 
+    
+    // ⭐ 추가: 퀴즈 완료 여부
+    private boolean quizAlreadyTaken = false; 
 
-    private String userId;
-    private RecycleLogDAO logDAO;
-    private UserDAO userDAO;
+  
+    private static final Map<String, String> CATEGORY_IMAGE_MAP = new HashMap<>();
+    static {
+   
+        CATEGORY_IMAGE_MAP.put("종이", "paper.png");      
+        CATEGORY_IMAGE_MAP.put("비닐", "vinyl.png");
+        CATEGORY_IMAGE_MAP.put("유리병", "glass.png");
+        CATEGORY_IMAGE_MAP.put("캔ㆍ고철", "can_metal.png");
+        CATEGORY_IMAGE_MAP.put("스티로폼", "styrofoam.png");
+        CATEGORY_IMAGE_MAP.put("플라스틱", "plastic.png");
+        CATEGORY_IMAGE_MAP.put("종이팩", "paper_pack.png");
+        CATEGORY_IMAGE_MAP.put("기타", "clothes.png"); 
+    }
+    
+ 
+    private ImageIcon loadImage(String categoryName, int size) {
+        String fileName = CATEGORY_IMAGE_MAP.get(categoryName);
+        if (fileName == null) {
+            return null;
+        }
+     
+        String imagePath = "/images/" + fileName; 
+        URL imageUrl = getClass().getResource(imagePath);
 
-    private boolean quizInProgress = true;
-    private final int POINT_PER_QUIZ = 10;
+        if (imageUrl != null) {
+            ImageIcon originalIcon = new ImageIcon(imageUrl);
+            Image image = originalIcon.getImage();
+            Image scaledImage = image.getScaledInstance(size, size, Image.SCALE_SMOOTH); 
+            return new ImageIcon(scaledImage);
+        } else {
+       
+            return null;
+        }
+    }
 
-
+   
     private class QuizItem extends JPanel {
         private String answer;
-        private JLabel textLabel;
-        private JPanel imageBox;
+        private Color defaultBorderColor = new Color(180, 200, 255); 
+        private int defaultBorderThickness = 2;
+        private boolean isImageOption; 
 
+       
+        public QuizItem(String answerText, boolean isImageOption) {
+            this.answer = answerText;
+            this.isImageOption = isImageOption; 
+            setLayout(new BorderLayout(5, 5));
+            
+   
+            setPreferredSize(new Dimension(150, 150)); 
+            setCursor(new Cursor(Cursor.HAND_CURSOR));
+            
+          
+            setBackground(new Color(240, 245, 255)); 
+            
+    
+            setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(defaultBorderColor, defaultBorderThickness), 
+                BorderFactory.createEmptyBorder(3, 3, 3, 3) 
+            ));
+
+
+            ImageIcon itemIcon = loadImage(answerText, 140); 
+            
+            JPanel imageWrapper = new JPanel(new GridBagLayout());
+   
+            imageWrapper.setBackground(new Color(240, 245, 255)); 
+            JLabel imageLabel = new JLabel(itemIcon, SwingConstants.CENTER); 
+            
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.anchor = GridBagConstraints.CENTER; 
+            imageWrapper.add(imageLabel, gbc);
+
+
+            JLabel textLabel = new JLabel("<html><center><b>" + answerText + "</b></center></html>", SwingConstants.CENTER);
+            textLabel.setFont(new Font("맑은 고딕", Font.BOLD, 14));
+            textLabel.setForeground(Color.DARK_GRAY);
+  
+            textLabel.setPreferredSize(new Dimension(150, 20)); 
+  
+            textLabel.setBackground(new Color(240, 245, 255)); 
+            textLabel.setOpaque(true);
+
+            add(imageWrapper, BorderLayout.CENTER);
+            add(textLabel, BorderLayout.SOUTH);
+        }
+        
+        // 텍스트 보기 (유형 1: 이미지 -> 카테고리) 
         public QuizItem(String answerText) {
             this.answer = answerText;
-            setLayout(new BorderLayout());
-            this.setBackground(Color.WHITE);
-            this.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+            this.isImageOption = false; 
+            setLayout(new GridBagLayout()); 
+            setPreferredSize(new Dimension(150, 150));
+            setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-            // 텍스트 라벨 (정답 텍스트)
-            textLabel = new JLabel(answerText, SwingConstants.CENTER);
-            textLabel.setFont(new Font("맑은 고딕", Font.BOLD, 18));
+            setBackground(new Color(240, 245, 255)); 
+            
+            setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(defaultBorderColor, defaultBorderThickness), 
+                BorderFactory.createEmptyBorder(10, 10, 10, 10) 
+            ));
 
-            // 이미지 박스 (이미지 추가를 위해 남겨둠)
-            imageBox = new JPanel();
-            imageBox.setPreferredSize(new Dimension(80, 80));
-            imageBox.setBackground(new Color(240, 240, 240));
-            imageBox.setLayout(new GridBagLayout());
-            // 이미지 자리에 텍스트 임시 삽입
-            imageBox.add(new JLabel("Image", SwingConstants.CENTER));
 
-            add(imageBox, BorderLayout.NORTH);
-            add(textLabel, BorderLayout.CENTER);
+            JLabel textLabel = new JLabel("<html><center><b>" + answerText + "</b></center></html>", SwingConstants.CENTER);
+            textLabel.setForeground(new Color(40, 40, 40)); 
+         
+            textLabel.setFont(new Font("맑은 고딕", Font.BOLD, 19)); 
+            add(textLabel);
+        }
 
-            // 마우스 클릭 리스너 추가
-            addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    if (quizInProgress) {
-                        checkAnswer(answerText);
-                    }
-                }
-            });
+        public String getAnswer() {
+            return this.answer;
+        }
 
-            // 마우스 오버 효과
-            addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseEntered(MouseEvent e) {
-                    if (quizInProgress) setBackground(new Color(230, 240, 255));
-                }
+        // 정답/오답에 따라 테두리 색상 변경
+        public void setSelected(boolean isCorrect) {
+            Color borderColor = isCorrect ? new Color(0, 150, 0) : new Color(200, 0, 0);
+            int thickness = 3; 
+            
+            int padding = this.isImageOption ? 3 : 10;
+            
+            setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(borderColor, thickness), 
+                BorderFactory.createEmptyBorder(padding, padding, padding, padding)
+            ));
+        }
 
-                @Override
-                public void mouseExited(MouseEvent e) {
-                    if (quizInProgress) setBackground(Color.WHITE);
-                }
-            });
+        public void resetBorder() {
+      
+            int padding = this.isImageOption ? 3 : 10;
+            
+             setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(defaultBorderColor, defaultBorderThickness), 
+                BorderFactory.createEmptyBorder(padding, padding, padding, padding)
+            ));
         }
     }
 
-    // 퀴즈 데이터 모델
+    // 퀴즈 데이터를 담는 클래스
     private class Quiz {
+        enum QuizType {
+            IMAGE_TO_CATEGORY, 
+            GUIDE_TO_IMAGE    
+        }
+        
+        QuizType type;
         String question;
-        String answer;
-        List<String> choices;
+        String correctAnswer; 
+        List<String> options; 
+        String questionImageName; 
+        String guideSnippet; 
 
-        public Quiz(String q, String a, String... c) {
-            this.question = q;
-            this.answer = a;
-            this.choices = new ArrayList<>();
-            for (String choice : c) {
-                choices.add(choice);
-            }
-            // 정답을 포함하여 보기를 구성
-            choices.add(answer);
-            Collections.shuffle(choices); // 보기 순서 섞기
+        public Quiz(QuizType type, String question, String correctAnswer, List<String> options, String image, String guide) {
+            this.type = type;
+            this.question = question;
+            this.correctAnswer = correctAnswer;
+            this.options = options;
+            this.questionImageName = image;
+            this.guideSnippet = guide;
+            Collections.shuffle(this.options, random);
+        }
+
+        public String getCorrectAnswer() {
+            return correctAnswer;
         }
     }
 
-    public QuizPanel(String userId) {
-        this.userId = userId;
+    public QuizPanel(UserDTO user) throws Exception {
+        this.currentUser = user;
 
-
+        this.logDAO = new RecycleLogDAO(); 
+        
+        // ⭐ 1. 오늘 퀴즈 완료 여부 확인
         try {
-
-            this.userDAO = new UserDAO();
-        } catch (Exception e) {
-             System.err.println("DAO 초기화 실패: " + e.getMessage());
-             JOptionPane.showMessageDialog(null, "DB 연결 또는 퀴즈 기능 초기화 실패", "DB Error", JOptionPane.ERROR_MESSAGE);
-             throw new RuntimeException("DB 연결 또는 DAO 초기화 실패", e);
+            this.quizAlreadyTaken = logDAO.hasTakenQuizToday(currentUser.getUserId());
+        } catch (SQLException e) {
+             System.err.println("오늘 퀴즈 완료 여부 확인 DB 오류: " + e.getMessage());
+             throw new Exception("퀴즈 제한 확인에 실패했습니다.", e);
+        }
+        
+        try {
+            // ⭐ 2. 퀴즈를 아직 안 풀었을 때만 데이터를 로드
+            if (!this.quizAlreadyTaken) {
+                initializeQuizDataFromDB();
+            }
+        } catch (SQLException e) {
+            System.err.println("퀴즈 데이터 로드 DB 오류: " + e.getMessage());
+            throw new Exception("퀴즈 데이터 로드에 실패했습니다.", e);
         }
 
-        // 퀴즈 데이터 초기화
-        initializeQuizzes();
 
-        setLayout(new BorderLayout(10, 10));
         setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        setLayout(new BorderLayout(15, 15));
 
-        // 1. 질문 레이블
-        questionLabel = new JLabel("", SwingConstants.CENTER);
+        JPanel northPanel = new JPanel();
+        northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.Y_AXIS));
+        
+    
+        questionLabel = new JLabel("", SwingConstants.LEFT);
         questionLabel.setFont(new Font("맑은 고딕", Font.BOLD, 20));
-        add(questionLabel, BorderLayout.NORTH);
 
-        // 2. 퀴즈 선택지 그리드 패널
-        quizGrid = new JPanel(new GridLayout(2, 2, 10, 10));
+        questionLabel.setAlignmentX(Component.LEFT_ALIGNMENT); 
+        northPanel.add(questionLabel);
+
+        northPanel.add(Box.createVerticalStrut(15)); 
+        
+   
+        questionImageLabel = new JLabel("", SwingConstants.CENTER);
+        questionImageLabel.setPreferredSize(new Dimension(200, 200)); 
+        questionImageLabel.setMaximumSize(new Dimension(200, 200));
+        
+    
+        JPanel imageWrapperPanel = new JPanel(new GridBagLayout());
+        imageWrapperPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200)); 
+        imageWrapperPanel.setAlignmentX(Component.LEFT_ALIGNMENT); 
+
+        imageWrapperPanel.add(questionImageLabel); 
+        
+        northPanel.add(imageWrapperPanel);
+        
+        guideDisplayArea = new JEditorPane();
+        guideDisplayArea.setContentType("text/html");
+        guideDisplayArea.setEditable(false);
+        guideDisplayArea.setBackground(new Color(250, 250, 240));
+        
+        // ⭐ 입력 커서(Caret) 비활성화 추가
+        guideDisplayArea.setCaret(new DisabledCaret());
+        
+        guideScrollPane = new JScrollPane(guideDisplayArea); 
+        
+        guideScrollPane.setPreferredSize(new Dimension(600, 100)); 
+        
+        guideScrollPane.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+
+        guideScrollPane.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1));
+        
+        guideScrollPane.setAlignmentX(Component.LEFT_ALIGNMENT); 
+        northPanel.add(guideScrollPane);
+
+        add(northPanel, BorderLayout.NORTH);
+
+        quizGrid = new JPanel(new GridLayout(2, 2, 20, 20));
         add(quizGrid, BorderLayout.CENTER);
 
-        // 3. 메시지 레이블 (정답/오답 표시)
-        messageLabel = new JLabel("분리수거 퀴즈를 시작합니다!", SwingConstants.CENTER);
+        messageLabel = new JLabel("분리수거 퀴즈에 도전해 보세요!", SwingConstants.CENTER);
         messageLabel.setFont(new Font("맑은 고딕", Font.PLAIN, 16));
-        messageLabel.setForeground(Color.BLUE);
+        messageLabel.setForeground(Color.DARK_GRAY);
         add(messageLabel, BorderLayout.SOUTH);
 
-        // 첫 번째 퀴즈 로드
-        loadQuiz(currentQuizIndex);
+        // ⭐ 3. 퀴즈 시작 또는 제한 메시지 표시
+        if (this.quizAlreadyTaken) {
+            showQuizAlreadyTakenMessage();
+        } else if (quizList != null && !quizList.isEmpty()) {
+            loadNextQuiz();
+        } else {
+            questionLabel.setText("퀴즈 출제에 필요한 데이터가 부족합니다. DB를 확인해 주세요.");
+            messageLabel.setText("");
+        }
     }
 
-    //퀴즈 데이터 생성 및 초기화
-    private void initializeQuizzes() {
-        quizList = new ArrayList<>();
-        quizList.add(new Quiz("Q1. 신문지, 책 등 종이류 분리수거 시 가장 먼저 해야 할 것은?", "테이프나 스프링 제거하기", "코팅된 종이만 따로 모으기", "음식물 묻은 종이 버리기", "물기에 젖지 않게 묶기"));
-        quizList.add(new Quiz("Q2. 페트병 분리수거 시 올바른 방법은?", "내용물을 비우고 라벨 제거", "뚜껑을 닫고 버리기", "찌그러뜨리지 않고 배출", "세척하지 않고 배출"));
-        quizList.add(new Quiz("Q3. 플라스틱 용기에 음식물이 묻어 세척이 어려운 경우 처리 방법은?", "일반 쓰레기로 버리기", "페트병과 함께 분리수거", "플라스틱 재활용함에 넣기", "물에 담가두었다가 버리기"));
-        quizList.add(new Quiz("Q4. 유리병 중 재활용이 불가능한 것은?", "깨진 유리", "음료수 병", "맥주병", "소주병"));
-        quizList.add(new Quiz("Q5. 스티로폼 포장재 분리수거 시 올바른 방법은?", "내용물 제거 후 깨끗이 씻기", "테이프를 붙인 채 버리기", "색상이 있는 스티로폼만 따로 모으기", "음식물이 묻은 채로 버리기"));
-
-        Collections.shuffle(quizList); // 퀴즈 순서 섞기
-    }
-
-
-    private void loadQuiz(int index) {
-        if (index >= quizList.size()) {
-            endQuiz();
+   
+    private void initializeQuizDataFromDB() throws SQLException {
+   
+        List<ItemDetail> allItems = GuideDAO.getAllItems();
+        if (allItems.isEmpty()) {
+            quizList = Collections.emptyList();
             return;
         }
 
-        Quiz currentQuiz = quizList.get(index);
-        questionLabel.setText(currentQuiz.question);
+        List<String> allCategoryNames = new ArrayList<>(CATEGORY_IMAGE_MAP.keySet());
+        
+        if (allCategoryNames.size() < 4) {
+             System.err.println("경고: 퀴즈 출제에 필요한 최소 카테고리(4개)가 부족합니다.");
+             quizList = Collections.emptyList(); 
+             return;
+        }
+        
+        Set<String> usedCategories = new HashSet<>();
+        
+        quizList = new ArrayList<>();
+        Collections.shuffle(allItems, random);
+        
+        int type1Count = 2;
+        int generatedType1 = 0;
+        
+        for (ItemDetail item : allItems) {
+            if (generatedType1 >= type1Count) break;
+            if (usedCategories.contains(item.categoryName)) continue;
+            
+            String correctCategoryName = item.categoryName;
+            
+            String imageFileName = CATEGORY_IMAGE_MAP.get(correctCategoryName);
+            if (imageFileName == null) continue; 
+            
+            String questionText = "다음 분리수거 이미지에 해당하는 올바른 카테고리를 선택하세요.";
+            
+            List<String> options = generateOptions(allCategoryNames, correctCategoryName);
 
-        quizGrid.removeAll();
+            quizList.add(new Quiz(
+                Quiz.QuizType.IMAGE_TO_CATEGORY,
+                questionText,
+                correctCategoryName, 
+                options,
+                imageFileName, 
+                null
+            ));
+            usedCategories.add(correctCategoryName);
+            generatedType1++;
+        }
+        
+        int type2Count = QUIZ_COUNT - type1Count;
+        int generatedType2 = 0;
+        
+        Collections.shuffle(allItems, random);
+        Set<String> usedItemNames = new HashSet<>(); 
 
-        for (String choice : currentQuiz.choices) {
-            QuizItem item = new QuizItem(choice);
-            quizGrid.add(item);
+        for (ItemDetail item : allItems) {
+            if (generatedType2 >= type2Count) break;
+            
+            String correctItemName = item.itemName;
+            String correctCategoryName = item.categoryName;
+            
+            if (usedItemNames.contains(correctItemName) || !CATEGORY_IMAGE_MAP.containsKey(correctCategoryName)) continue;
+
+            if (item.disposalGuide == null || item.disposalGuide.length() < 20) continue;
+            
+            String questionText = "다음은 특정 품목의 배출 지침입니다. 어떤 품목에 해당하는지 이미지에서 골라주세요.";
+            
+            String cssStyles = GuideDAO.getCSSStyles(); 
+            
+            String guideText = item.disposalGuide
+                                 .replaceAll("<h2>.*?</h2>", "") 
+                                 .replaceAll("<[^>]*>", "")      
+                                 .replaceAll("\\s+", " ")       
+                                 .trim();
+            
+            String itemName = item.itemName; 
+            String summarizedGuide = guideText;
+            
+       
+            String guideForDisplay = String.format(
+                "<html><head>%s</head><body><div style='padding:5px; font-size:0.9em; text-align: left;'><b>세부 품목:</b> %s<br><b>설명:</b> %s</div></body></html>",
+                cssStyles, 
+                itemName, 
+                guideText 
+            );
+            
+            List<String> options = generateOptions(allCategoryNames, correctCategoryName);
+
+            quizList.add(new Quiz(
+                Quiz.QuizType.GUIDE_TO_IMAGE,
+                questionText,
+                correctCategoryName, 
+                options,
+                null, 
+                guideForDisplay 
+            ));
+            usedItemNames.add(correctItemName);
+            generatedType2++;
         }
 
-        quizGrid.revalidate();
-        quizGrid.repaint();
-        messageLabel.setText(String.format("Q%d. 다음 퀴즈!", index + 1));
-        messageLabel.setForeground(Color.BLUE);
+        Collections.shuffle(quizList, random);
+    }
+    
+    private List<String> generateOptions(List<String> allCategories, String correctAnswer) {
+       
+        List<String> wrongOptions = allCategories.stream()
+                                                .filter(name -> !name.equals(correctAnswer))
+                                                .collect(Collectors.toList());
+        Collections.shuffle(wrongOptions, random);
+
+        List<String> options = new ArrayList<>();
+        options.add(correctAnswer);
+    
+        options.addAll(wrongOptions.stream().limit(3).collect(Collectors.toList()));
+        Collections.shuffle(options, random);
+        return options;
     }
 
-    //정답을 확인하고 다음 퀴즈로 넘어감
-    private void checkAnswer(String selectedAnswer) {
-        Quiz currentQuiz = quizList.get(currentQuizIndex);
+    private void loadNextQuiz() {
+        quizGrid.removeAll();
+        answerSubmitted = false;
+        
+        guideScrollPane.setVisible(false);
+        questionImageLabel.setIcon(null);
+        questionImageLabel.setVisible(false);
 
-        // 정답/오답 판별
-        if (selectedAnswer.equals(currentQuiz.answer)) {
-            correctCount++;
-            messageLabel.setText("정답입니다! 🥳 (+10점)");
-            messageLabel.setForeground(new Color(0, 100, 0)); 
+
+        if (currentQuizIndex < quizList.size()) {
+            Quiz currentQuiz = quizList.get(currentQuizIndex);
+            
+           
+            questionLabel.setText("<html>" + (currentQuizIndex + 1) + "/" + quizList.size() + ". " + currentQuiz.question + "</html>");
+            
+         
+            if (currentQuiz.type == Quiz.QuizType.IMAGE_TO_CATEGORY) {
+              
+                ImageIcon imageIcon = loadImage(currentQuiz.correctAnswer, 150);
+                if (imageIcon != null) {
+                    questionImageLabel.setIcon(imageIcon);
+                    questionImageLabel.setVisible(true);
+                }
+            } else if (currentQuiz.type == Quiz.QuizType.GUIDE_TO_IMAGE) {
+            
+                guideDisplayArea.setText(currentQuiz.guideSnippet);
+                guideScrollPane.setVisible(true);
+            }
+            
+     
+            for (String option : currentQuiz.options) {
+                QuizItem item;
+                if (currentQuiz.type == Quiz.QuizType.GUIDE_TO_IMAGE) {
+                    
+                    item = new QuizItem(option, true); 
+                } else {
+               
+                    item = new QuizItem(option); 
+                }
+                
+                item.addMouseListener(new MouseAdapter() {
+                    @Override
+                    public void mouseClicked(MouseEvent e) {
+                        if (!answerSubmitted) {
+                            handleAnswer(item, currentQuiz);
+                            answerSubmitted = true;
+                        }
+                    }
+                });
+                quizGrid.add(item);
+            }
+
+            messageLabel.setText("답변을 선택해 주세요.");
+            messageLabel.setForeground(Color.DARK_GRAY);
+            
+            questionImageLabel.revalidate();
+            guideScrollPane.revalidate();
+            quizGrid.revalidate();
+            quizGrid.repaint();
         } else {
-            messageLabel.setText(String.format("오답입니다. 😥 (정답: %s)", currentQuiz.answer));
-            messageLabel.setForeground(Color.RED);
+            finishQuiz();
+        }
+    }
+    
+    private void handleAnswer(QuizItem selectedItem, Quiz currentQuiz) {
+        String selectedAnswer = selectedItem.getAnswer();
+        boolean isCorrect = selectedAnswer.equals(currentQuiz.getCorrectAnswer());
+
+        for (Component comp : quizGrid.getComponents()) {
+            if (comp instanceof QuizItem) {
+                QuizItem item = (QuizItem) comp;
+                if (item.getAnswer().equals(currentQuiz.getCorrectAnswer())) {
+                    item.setSelected(true); 
+                } else if (item == selectedItem && !isCorrect) {
+                    item.setSelected(false); 
+                } else {
+                  
+                    item.resetBorder(); 
+                }
+            }
         }
 
-        // 퀴즈 진행 상태 잠금
-        quizInProgress = false;
+        if (isCorrect) {
+            correctCount++;
+            messageLabel.setText("✅ 정답입니다! 다음 문제로 넘어갑니다.");
+            messageLabel.setForeground(new Color(0, 150, 0));
+        } else {
+            messageLabel.setText("❌ 오답입니다. 정답은 '" + currentQuiz.getCorrectAnswer() + "'입니다.");
+            messageLabel.setForeground(new Color(200, 0, 0));
+        }
 
-        // 잠시 후 다음 퀴즈 로드 (마지막 퀴즈일 경우 endQuiz 호출)
-        Timer timer = new Timer(1500, new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                currentQuizIndex++;
-                quizInProgress = true;
-                loadQuiz(currentQuizIndex);
-            }
+        Timer timer = new Timer(1500, e -> {
+            currentQuizIndex++;
+            loadNextQuiz();
+            ((Timer)e.getSource()).stop();
         });
         timer.setRepeats(false);
         timer.start();
     }
+    
+    // ⭐ 추가된 메서드: 퀴즈 제한 메시지 표시
+    private void showQuizAlreadyTakenMessage() {
+        questionLabel.setText("🚫 오늘 퀴즈는 이미 완료했습니다.");
+        quizGrid.removeAll();
+        quizGrid.setLayout(new GridBagLayout()); 
+        
+        guideScrollPane.setVisible(false);
+        questionImageLabel.setIcon(null);
+        questionImageLabel.setVisible(false);
 
-    //퀴즈를 종료하고 결과와 포인트를 표시 
-    private void endQuiz() {
-        quizInProgress = false;
+        JLabel message = new JLabel("<html><center>분리수거 퀴즈는 **하루에 한 번**만 참여할 수 있습니다.<br>내일 다시 도전해 주세요!</center></html>", SwingConstants.CENTER);
+        message.setFont(new Font("맑은 고딕", Font.BOLD, 22));
+        message.setForeground(new Color(20, 100, 150));
+        
+        quizGrid.add(message);
 
-        // 획득 포인트 계산 (정답 수 * 문제당 포인트)
-        int rewardPoint = correctCount * POINT_PER_QUIZ;
+        messageLabel.setText("다음 퀴즈는 자정에 초기화됩니다.");
+        messageLabel.setForeground(Color.GRAY);
+        
+        quizGrid.revalidate();
+        quizGrid.repaint();
+    }
 
-        // DB에 포인트 적립
-        if (userDAO != null) {
+
+    
+    private void finishQuiz() {
+        questionLabel.setText("퀴즈 완료! 당신의 점수는 " + correctCount + " / " + quizList.size() + "점 입니다.");
+        quizGrid.removeAll();
+        quizGrid.setLayout(new BorderLayout());
+
+      
+        guideScrollPane.setVisible(false);
+        questionImageLabel.setIcon(null);
+        questionImageLabel.setVisible(false);
+
+        int reward = (correctCount == quizList.size()) ? QUIZ_REWARD_POINTS : 0;
+
+        if (reward > 0) {
             try {
-                userDAO.addPointsToUser(userId, rewardPoint);
+                String detail = String.format("분리수거 퀴즈 만점 (%d/%d)", correctCount, quizList.size());
+                
+             
+                logDAO.insertQuizReward(currentUser.getUserId(), detail, reward);
 
-                // 갱신된 전체 포인트 조회
-                int currentPoints = userDAO.getUserPoints(userId);
+                messageLabel.setText("🎉 축하합니다! 퀴즈 만점 보상 " + reward + " P가 적립되었습니다.");
+                messageLabel.setForeground(new Color(0, 100, 200));
 
-                messageLabel.setText(String.format("퀴즈 완료! 총 %d점 획득 (현재 누적 포인트: %d점)", rewardPoint, currentPoints));
-                messageLabel.setForeground(new Color(0, 100, 0)); 
-            } catch (SQLException ex) {
-                System.err.println("퀴즈 포인트 적립 DB 오류: " + ex.getMessage());
-                JOptionPane.showMessageDialog(this,
-                    "퀴즈 포인트 적립 중 DB 오류가 발생했습니다. (FK 확인)",
-                    "DB 오류",
-                    JOptionPane.ERROR_MESSAGE);
-                messageLabel.setText("퀴즈 완료! (포인트 적립 실패)");
+            } catch (SQLException e) {
+                System.err.println("퀴즈 포인트 적립 DB 오류: " + e.getMessage());
+                messageLabel.setText("적립 오류! DB 연결을 확인하세요.");
                 messageLabel.setForeground(Color.RED);
+                reward = 0; 
+            } catch (Exception e) {
+                System.err.println("시스템 오류: " + e.getMessage());
+                messageLabel.setText("시스템 오류로 적립에 실패했습니다.");
+                messageLabel.setForeground(Color.RED);
+                reward = 0; 
             }
         } else {
-            // DAO 초기화 실패 처리
-            messageLabel.setText(String.format("퀴즈 완료! 총 %d점 획득 (DB 연결 오류)", rewardPoint));
-            messageLabel.setForeground(new Color(0, 100, 0));
+            messageLabel.setText("만점(" + quizList.size() + "/" + quizList.size() + ")을 달성하면 " + QUIZ_REWARD_POINTS + " P가 적립됩니다.");
+            messageLabel.setForeground(new Color(0, 102, 204)); 
         }
 
-        // 퀴즈 결과 메시지
-        questionLabel.setText("퀴즈 종료!");
-        quizGrid.removeAll();
+        JLabel finalMessage = new JLabel("<html><center>퀴즈 종료</center></html>", SwingConstants.CENTER);
+        finalMessage.setFont(new Font("맑은 고딕", Font.BOLD, 30));
 
-        // 최종 결과 메시지 패널
-        JLabel finalMessage = new JLabel(
-            String.format("<html><p align='center'>🎉 **퀴즈 종료** 🎉</p><br>총 **%d문제** 중 **%d개 정답!**<br><strong>%d점</strong>을 획득했습니다.</html>", quizList.size(), correctCount, rewardPoint),
+        JLabel resultDetail = new JLabel(
+            String.format("<html><center>총 문제: %d 문제<br>정답: <font color='%s'>%d</font> 개<br>획득 포인트: %d P</center></html>",
+                quizList.size(), (correctCount == quizList.size() ? "blue" : "red"), correctCount, reward),
             SwingConstants.CENTER);
-        finalMessage.setFont(new Font("맑은 고딕", Font.BOLD, 24));
+        resultDetail.setFont(new Font("맑은 고딕", Font.PLAIN, 18));
 
-        // 최종 결과 패널
-        JPanel resultPanel = new JPanel(new GridBagLayout()); 
+        JPanel resultPanel = new JPanel(new GridLayout(2, 1));
         resultPanel.add(finalMessage);
+        resultPanel.add(resultDetail);
 
-        quizGrid.setLayout(new GridBagLayout()); 
-        quizGrid.add(resultPanel);
+        quizGrid.add(resultPanel, BorderLayout.CENTER);
 
         quizGrid.revalidate();
         quizGrid.repaint();
+    }
+    
+    // ⭐ 추가된 내부 클래스: JEditorPane의 캐럿(입력 커서)을 비활성화
+    /**
+     * JTextComponent에서 커서(Caret)를 표시하지 않도록 비활성화하는 클래스
+     */
+    private class DisabledCaret extends DefaultCaret {
+        
+        // 캐럿이 깜빡이는 것을 방지
+        @Override
+        public void setVisible(boolean v) {
+            super.setVisible(false);
+        }
+
+        // 캐럿을 화면에 그리는 것을 방지
+        @Override
+        public void paint(Graphics g) {
+            // 아무것도 그리지 않음
+        }
+
+        // 선택 영역을 조정하려고 할 때 발생하는 예외 방지 및 동작 중지
+        @Override
+        protected void adjustVisibility(Rectangle r) {
+            // 아무 것도 하지 않아 캐럿이 표시되지 않게 함
+        }
     }
 }

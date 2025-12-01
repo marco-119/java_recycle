@@ -46,7 +46,6 @@ public class UserDAO {
         }
     }
 
-    //사용자 로그인 처리를 수행
     public UserDTO loginUser(String id, String password) throws SQLException {
         String sql = "SELECT USER_ID, NICKNAME, BALANCE_POINTS, TOTAL_POINTS, ATTENDANCE_STREAK, IS_ADMIN FROM " + USERS_TABLE + 
                      " WHERE USER_ID = ? AND PASSWORD = ?";
@@ -73,8 +72,6 @@ public class UserDAO {
         return null; 
     }
 
-    //아이디 중복 확인을 수행
-
     public boolean isIdDuplicate(String id) throws SQLException {
         String sql = "SELECT COUNT(*) FROM " + USERS_TABLE + " WHERE USER_ID = ?";
         
@@ -91,7 +88,6 @@ public class UserDAO {
         return false;
     }
 
-    //닉네임 중복 확인을 수행
   
     public boolean isNicknameDuplicate(String nickname) throws SQLException {
         String sql = "SELECT COUNT(*) FROM " + USERS_TABLE + " WHERE NICKNAME = ?";
@@ -109,7 +105,6 @@ public class UserDAO {
         return false;
     }
 
-    // 새로운 사용자를 등록
   
     public boolean registerUser(String id, String password, String nickname) throws SQLException {
         String sql = "INSERT INTO " + USERS_TABLE + " (USER_ID, PASSWORD, NICKNAME) VALUES (?, ?, ?)";
@@ -133,7 +128,6 @@ public class UserDAO {
     }
     
 
-    //사용자의 모든 데이터를 조회
     public UserDTO getUserById(String userID) throws SQLException {
         String sql = "SELECT USER_ID, NICKNAME, BALANCE_POINTS, TOTAL_POINTS, ATTENDANCE_STREAK, IS_ADMIN FROM " + USERS_TABLE + " WHERE USER_ID = ?";
         
@@ -157,12 +151,10 @@ public class UserDAO {
         return null; 
     }
     
-    //사용자의 모든 데이터를 조회
     public UserDTO getUserFullData(String userID) throws SQLException {
         return getUserById(userID);
     }
     
-    // 사용자의 현재 포인트를 조회
     public int getUserPoints(String userID) throws SQLException {
         String sql = "SELECT BALANCE_POINTS FROM " + USERS_TABLE + " WHERE USER_ID = ?";
         
@@ -179,7 +171,6 @@ public class UserDAO {
         return 0; 
     }
 
-    //사용자의 포인트를 누적
     public void addPointsToUser(String userID, int points) throws SQLException {
         String sql = "UPDATE " + USERS_TABLE + " SET BALANCE_POINTS = BALANCE_POINTS + ?, TOTAL_POINTS = TOTAL_POINTS + ? WHERE USER_ID = ?";
         
@@ -194,7 +185,6 @@ public class UserDAO {
         }
     }
     
-    //트랜잭션 처리를 위해 외부 Connection을 사용하여 포인트를 누적
     public void addPointsToUser(Connection conn, String userId, int points) throws SQLException {
         String sql = "UPDATE " + USERS_TABLE + " SET BALANCE_POINTS = BALANCE_POINTS + ?, TOTAL_POINTS = TOTAL_POINTS + ? WHERE USER_ID = ?";
         
@@ -207,7 +197,6 @@ public class UserDAO {
         }
     }
 
-    //퀴즈/출석체크 결과로 사용자 포인트를 갱신하고 연속 출석 횟수를 업데이트
     public void updateQuizResult(UserDTO user) throws SQLException {
          String sql = "UPDATE " + USERS_TABLE + " SET TOTAL_POINTS = ?, BALANCE_POINTS = ?, ATTENDANCE_STREAK = ? WHERE USER_ID = ?";
          
@@ -227,8 +216,6 @@ public class UserDAO {
              throw e;
          }
     }
-
-    // 랭킹 관련 메서드 
 
     public List<RankingDTO> getAllUserRankings() throws SQLException {
         String sql = "SELECT USER_ID, NICKNAME, BALANCE_POINTS FROM " + USERS_TABLE + 

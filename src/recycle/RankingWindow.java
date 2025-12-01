@@ -7,188 +7,181 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-// RankingManager의 내부 DTO를 임포트
-import recycle.RankingManager.RankingDTO; 
+import recycle.RankingManager.RankingEntry;
 
+public class RankingWindow extends JPanel {
 
-public class RankingWindow extends JPanel { 
-    
-    private final String currentUserId; 
-    
-    private recycle.RankingManager rankingManager; 
+    private final String currentUserId;
+
+    private recycle.RankingManager manager;
     private JPanel rankListPanel;
-    private JLabel totalPointsLabel; 
-    
+    private JLabel infoLabel;
+    private int userCurrentPoints;
+
     // UI에 필요한 상수
     private static final Font TITLE_FONT = new Font("맑은 고딕", Font.BOLD, 30);
     private static final Font LABEL_FONT = new Font("맑은 고딕", Font.PLAIN, 16);
     private static final Color[] RANK_COLORS = {
-        new Color(255, 223, 0), 
-        new Color(192, 192, 192), 
-        new Color(205, 127, 50), 
+        new Color(255, 223, 0),
+        new Color(192, 192, 192),
+        new Color(205, 127, 50),
         Color.WHITE,
         Color.WHITE
     };
+    
+    // **새로운 상수: 표시할 최대 랭킹 수**
+    private static final int MAX_RANK_DISPLAY = 5; 
 
-    public RankingWindow(String userId) { 
+    public RankingWindow(String userId) {
         this.currentUserId = (userId != null && !userId.isEmpty()) ? userId : "테스트ID";
-        
+
         try {
-            this.rankingManager = new recycle.RankingManager();
+            this.manager = new recycle.RankingManager();
         } catch (RuntimeException e) {
             System.err.println("랭킹 관리자 초기화 실패: " + e.getMessage());
-            this.rankingManager = null; 
         }
 
         setLayout(new BorderLayout(10, 10));
         setBorder(new EmptyBorder(20, 20, 20, 20));
 
-        // 1. 상단 패널 (TOP 5 타이틀 및 총 포인트)
-        JPanel topPanel = new JPanel(new BorderLayout());
-
-        JLabel titleLabel = new JLabel("TOP 5");
+        JLabel titleLabel = new JLabel("분리수거 포인트 랭킹", SwingConstants.CENTER);
         titleLabel.setFont(TITLE_FONT);
-        titleLabel.setHorizontalAlignment(JLabel.CENTER);
+        add(titleLabel, BorderLayout.NORTH);
 
-        this.totalPointsLabel = new JLabel("총 포인트: 0p"); 
-        totalPointsLabel.setFont(LABEL_FONT);
+        rankListPanel = new JPanel();
+        rankListPanel.setLayout(new BoxLayout(rankListPanel, BoxLayout.Y_AXIS));
+        JScrollPane scrollPane = new JScrollPane(rankListPanel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        add(scrollPane, BorderLayout.CENTER);
 
-        topPanel.add(titleLabel, BorderLayout.CENTER);
-        topPanel.add(totalPointsLabel, BorderLayout.EAST);
-        add(topPanel, BorderLayout.NORTH);
+        infoLabel = new JLabel("<html><p align='center'>[내 정보] 랭킹 정보를 로드 중입니다...</p></html>", SwingConstants.CENTER);
+        infoLabel.setFont(LABEL_FONT);
+        infoLabel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        infoLabel.setBackground(new Color(240, 248, 255));
+        infoLabel.setOpaque(true);
+        add(infoLabel, BorderLayout.SOUTH);
 
-        // 2. 랭킹 목록 패널
-        this.rankListPanel = new JPanel();
-        rankListPanel.setLayout(new GridLayout(5, 1, 0, 10)); 
-        rankListPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
-
-        // 3. 내 랭킹 정보 표시 패널 (SOUTH에 먼저 추가)
-        add(createMyRankPanel(), BorderLayout.SOUTH);
-        
-        // 4. 랭킹 정보 업데이트 및 표시 (초기 로드)
-        updateRankingDisplay();
-        
-        add(rankListPanel, BorderLayout.CENTER);
+        loadRankingList();
     }
 
 
-    public void updateRankingDisplay() {
-        if (rankingManager == null) {
-            rankListPanel.removeAll();
-            rankListPanel.add(new JLabel("DB 연결 오류로 랭킹 정보를 표시할 수 없습니다.", SwingConstants.CENTER));
-            rankListPanel.revalidate();
-            rankListPanel.repaint();
+    public void loadRankingList() {
+        if (manager == null) {
+            System.err.println("RankingManager가 초기화되지 않았습니다. 랭킹 로드 불가.");
+            infoLabel.setText("<html><p align='center'>[내 정보] DB 연결 오류</p></html>");
             return;
         }
-        
-        rankListPanel.removeAll();
-        List<RankingDTO> rankings = new ArrayList<>();
-        
+
         try {
-            rankings = rankingManager.getSortedRankingList();
-        } catch (SQLException e) {
-            System.err.println("랭킹 정보 로드 오류: " + e.getMessage());
-        }
 
-        for (int i = 0; i < 5; i++) {
-            JPanel entryPanel;
-            if (i < rankings.size()) {
-                RankingDTO entry = rankings.get(i);
-                entryPanel = createRankEntryPanel(i + 1, entry.getNickname(), entry.getBalancePoints(), RANK_COLORS[i]);
-            } else {
-                entryPanel = createRankEntryPanel(i + 1, "---", 0, Color.WHITE);
-            }
-            rankListPanel.add(entryPanel);
-        }
-
-        // '내 랭킹 정보' 패널 업데이트
-        LayoutManager lm = getLayout();
-        if (lm instanceof BorderLayout) {
-            BorderLayout bl = (BorderLayout) lm;
-            Component southComponent = bl.getLayoutComponent(this, BorderLayout.SOUTH);
+            List<RankingManager.RankingEntry> rankingList = manager.getSortedRankingList();
             
-            if (southComponent instanceof MyRankPanel) {
-                ((MyRankPanel) southComponent).updateMyRank(rankings);
+            // **수정 사항 1: 상위 5위까지만 표시하도록 리스트를 제한합니다.**
+            List<RankingManager.RankingEntry> topRankingList = rankingList.subList(0, Math.min(rankingList.size(), MAX_RANK_DISPLAY));
+            
+            updateRankListUI(topRankingList);
+
+            // **내 랭킹 정보는 전체 랭킹 리스트를 사용해서 업데이트합니다.**
+            updateMyRank(rankingList); 
+
+        } catch (SQLException e) {
+            System.err.println("랭킹 정보 로드 중 DB 오류: " + e.getMessage());
+            infoLabel.setText("<html><p align='center'>[내 정보] 랭킹 로드 오류</p></html>");
+        }
+    }
+
+
+    private void updateRankListUI(List<RankingEntry> rankingList) {
+        rankListPanel.removeAll();
+
+        if (rankingList.isEmpty()) {
+            JLabel noRank = new JLabel("랭킹 정보가 없습니다.", SwingConstants.CENTER);
+            noRank.setFont(LABEL_FONT);
+            rankListPanel.add(noRank);
+        } else {
+            // **수정 사항 2: for 루프는 이미 상위 5위로 제한된 리스트를 순회합니다.**
+            for (int i = 0; i < rankingList.size(); i++) {
+                RankingEntry entry = rankingList.get(i);
+                int rank = i + 1; // 1위부터 시작
+
+                rankListPanel.add(createRankItemPanel(rank, entry));
+
+                // 마지막 항목 뒤에는 구분선 제외 (MAX_RANK_DISPLAY에 관계없이 리스트 크기를 기준으로)
+                if (i < rankingList.size() - 1) { 
+                    rankListPanel.add(new JSeparator(SwingConstants.HORIZONTAL));
+                }
             }
         }
-        
+
         rankListPanel.revalidate();
         rankListPanel.repaint();
     }
 
-    //개별 순위 항목 패널을 생성
-    private JPanel createRankEntryPanel(int rank, String name, int point, Color bgColor) {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(bgColor);
-        
-        if (bgColor.equals(Color.WHITE)) {
-            panel.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1));
-        } else {
-            panel.setBorder(BorderFactory.createLineBorder(bgColor.darker(), 2)); 
-        }
 
-        // 1. 순위 번호 (WEST)
+    private JPanel createRankItemPanel(int rank, RankingEntry entry) {
+        JPanel itemPanel = new JPanel(new BorderLayout(15, 5));
+        itemPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        Color bgColor = Color.WHITE;
+        // 랭킹 순서에 따라 색상 적용. RANK_COLORS는 여전히 1~3위 색상을 포함.
+        if (rank <= RANK_COLORS.length) { 
+            bgColor = RANK_COLORS[rank - 1];
+        }
+        itemPanel.setBackground(bgColor);
+
         JLabel rankLabel = new JLabel(String.valueOf(rank));
         rankLabel.setFont(new Font("맑은 고딕", Font.BOLD, 20));
-        rankLabel.setPreferredSize(new Dimension(50, 50));
-        rankLabel.setHorizontalAlignment(JLabel.CENTER);
+        rankLabel.setPreferredSize(new Dimension(30, 20));
+        rankLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        itemPanel.add(rankLabel, BorderLayout.WEST);
 
-        // 2. 닉네임 (CENTER)
-        JLabel nameLabel = new JLabel(name);
-        nameLabel.setFont(new Font("맑은 고딕", Font.PLAIN, 18));
-        nameLabel.setBorder(new EmptyBorder(0, 20, 0, 0));
+        JLabel nicknameLabel = new JLabel(entry.getNickname());
+        nicknameLabel.setFont(new Font("맑은 고딕", Font.BOLD, 18));
+        itemPanel.add(nicknameLabel, BorderLayout.CENTER);
 
-        // 3. 포인트 (EAST)
-        JLabel pointLabel = new JLabel((point == 0 && "---".equals(name)) ? "-" : (point + "P"));
-        pointLabel.setFont(new Font("맑은 고딕", Font.BOLD, 18));
-        pointLabel.setBorder(new EmptyBorder(0, 0, 0, 20));
-        pointLabel.setHorizontalAlignment(SwingConstants.RIGHT); 
+        JLabel pointsLabel = new JLabel(String.format("%,d P", entry.getBalancePoints()));
+        pointsLabel.setFont(new Font("맑은 고딕", Font.BOLD, 18));
+        pointsLabel.setForeground(new Color(0, 100, 200));
+        itemPanel.add(pointsLabel, BorderLayout.EAST);
 
-        panel.add(rankLabel, BorderLayout.WEST);
-        panel.add(nameLabel, BorderLayout.CENTER);
-        panel.add(pointLabel, BorderLayout.EAST);
+        // 현재 사용자 강조 처리는 전체 랭킹 리스트에 포함되어 있더라도 상위 5위 항목에서만 발생
+        if (entry.getUserId().equals(currentUserId)) {
+            itemPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(0, 150, 0), 2),
+                BorderFactory.createEmptyBorder(8, 8, 8, 8)
+            ));
+        }
 
-        return panel;
+        return itemPanel;
     }
-    
-    // 내 랭킹 정보를 표시하는 패널을 생성하고 반환
-    private MyRankPanel createMyRankPanel() {
-        return new MyRankPanel(currentUserId, rankingManager);
-    }
-}
 
 
-// 내부 클래스: 내 랭킹 정보 패널
-
-class MyRankPanel extends JPanel {
-    private final String userId;
-    private final recycle.RankingManager manager;
-    private final JLabel infoLabel;
-    
-    public MyRankPanel(String userId, recycle.RankingManager manager) {
-        this.userId = userId;
-        this.manager = manager;
-        
-        setLayout(new BorderLayout());
-        setBorder(new EmptyBorder(15, 0, 0, 0));
-
-        this.infoLabel = new JLabel();
-        this.infoLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        this.infoLabel.setFont(new Font("맑은 고딕", Font.PLAIN, 15));
-        
-        add(infoLabel, BorderLayout.CENTER);
-        infoLabel.setText(manager != null ? 
-            String.format("<html><p align='center'>[내 정보] 닉네임: %s (ID: %s) | 현재 포인트: 0점 | 순위: 로딩 중</p></html>", userId, userId) : 
-            "<html><p align='center'>[내 정보] DB 연결 오류</p></html>");
-    }
-    
-    public void updateMyRank(List<RankingDTO> rankingList) {
+    public void updateMyRank(List<RankingEntry> rankingList) {
         if (manager == null) {
             infoLabel.setText("<html><p align='center'>[내 정보] DB 연결 오류</p></html>");
+            this.userCurrentPoints = 0;
             return;
         }
-        
-        String myInfoHtml = manager.getMyRankInfo(userId, rankingList);
+
+        String myInfoHtml = manager.getMyRankInfo(currentUserId, rankingList);
         infoLabel.setText(myInfoHtml);
+
+
+        try {
+            int start = myInfoHtml.indexOf("현재 포인트: <strong>") + "현재 포인트: <strong>".length();
+            int end = myInfoHtml.indexOf("점</strong>", start);
+            if (start > 0 && end > start) {
+                String pointStr = myInfoHtml.substring(start, end).trim().replaceAll(",", "");
+                this.userCurrentPoints = Integer.parseInt(pointStr);
+            } else {
+                this.userCurrentPoints = 0;
+            }
+        } catch (Exception e) {
+             System.err.println("MyRank 포인트 파싱 오류: " + e.getMessage());
+             this.userCurrentPoints = 0;
+        }
     }
 }

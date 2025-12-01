@@ -10,7 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
-
+import java.util.LinkedHashMap;
+import java.sql.SQLException; 
 
 public class RecyclePanel extends JPanel {
 
@@ -19,12 +20,12 @@ public class RecyclePanel extends JPanel {
     private final RecycleLogDAO logDAO;
     private final Map<String, Integer> itemPoints; 
 
-    // 왼쪽 영역 (입력 및 포인트 확인) 컴포넌트
+    // 왼쪽 영역 
     private JComboBox<String> itemComboBox;
     private JLabel pointLabel; 
     private JButton addButton;
 
-    // 오른쪽 영역 (임시 목록) 컴포넌트
+    // 오른쪽 영역 
     private JTable currentTable;
     private DefaultTableModel tableModel;
     private JButton saveButton;
@@ -33,331 +34,273 @@ public class RecyclePanel extends JPanel {
     // 상태 변수
     private int totalPoint = 0; 
     
+    // 합계 행 배경색
+    private static final Color TOTAL_ROW_BACKGROUND = new Color(220, 240, 255); // 연한 푸른색
+    
     // UI 로직에 필요한 상수
     private static final String DEFAULT_SELECTION_TEXT = "--- 품목 선택 ---";
-    private static final String[] COLUMN_NAMES = {"순번", "품목", "포인트"};
+    private static final String[] CURRENT_LOG_COLUMN_NAMES = {"순번", "품목", "포인트"};
     
     // 폰트 설정
-    private static final Font KOREAN_FONT = new Font("맑은 고딕", Font.PLAIN, 12);
-    private static final Font BUTTON_FONT = new Font("맑은 고딕", Font.BOLD, 12);
+    private static final Font KOREAN_FONT = new Font("맑은 고딕", Font.PLAIN, 15);
+    private static final Font KOREAN_BOLD_FONT = new Font("맑은 고딕", Font.BOLD, 15);
 
-    public RecyclePanel(String userId) throws Exception {
+
+    public RecyclePanel(String userId) {
         this.userId = userId;
-        
-        this.logDAO = new RecycleLogDAO(); 
-        this.itemPoints = logDAO.getAllItemPoints(); 
-        
-        // 1. 메인 레이아웃 (BorderLayout) 설정
-        setLayout(new BorderLayout(5, 5));
+        this.itemPoints = initializeItemPoints(); 
 
-        // 2. 좌우 분할 (JSplitPane) 설정
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        
-        splitPane.setDividerLocation(210); 
-        splitPane.setResizeWeight(0.0); 
-
-        // 3. 좌/우 패널 생성 및 추가
-        JPanel inputActionPanel = createInputActionPanel();
-        splitPane.setLeftComponent(inputActionPanel);
-
-        JPanel currentListPanel = createCurrentListPanel();
-        splitPane.setRightComponent(currentListPanel);
-
-        setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        
-        add(splitPane, BorderLayout.CENTER);
-        
-        // 4. DB에 저장된 오늘의 기록을 로드하고 합계 행을 업데이트합니다.
-        loadTodayRecycleLogs();
-    }
-    
-    /**
-     *  DB에 저장된 오늘(당일)의 분리수거 기록을 테이블에 로드합니다.
-     */
-    public void loadTodayRecycleLogs() {
-        tableModel.setRowCount(0); 
-        totalPoint = 0;
-        
+        RecycleLogDAO dao = null;
         try {
-            List<RecycleLogDAO.LogItem> todayLogs = logDAO.getTodayRecycleLogs(userId); 
-
-            if (todayLogs != null && !todayLogs.isEmpty()) {
-                for (int i = 0; i < todayLogs.size(); i++) {
-                    RecycleLogDAO.LogItem log = todayLogs.get(i);
-                    int point = itemPoints.getOrDefault(log.itemName, 0);
-                    
-                    tableModel.addRow(new Object[]{
-                        i + 1,       
-                        log.itemName, 
-                        point + "P"   
-                    });
-                    totalPoint += point;
-                }
-            }
+            dao = new RecycleLogDAO();
         } catch (Exception e) {
-            System.err.println("오늘의 분리수거 기록 로드 중 DB 오류: " + e.getMessage());
+            System.err.println("RecycleLogDAO 초기화 오류: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "DB 초기화 오류: " + e.getMessage(), "오류", JOptionPane.ERROR_MESSAGE);
         }
-        
-        updateTotalRow(); 
+        this.logDAO = dao;
+
+        if (this.logDAO != null) {
+            createUILayout(); 
+        } else {
+            removeAll();
+            setLayout(new GridBagLayout());
+            add(new JLabel("DB 연결 오류로 패널을 사용할 수 없습니다.", SwingConstants.CENTER));
+        }
     }
     
-    private JPanel createInputActionPanel() {
-        JPanel panel = new JPanel(new GridBagLayout()); 
-        panel.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createEmptyBorder(2, 5, 2, 5), 
-            "분리수거 항목 추가"
-        ));
 
-        JPanel inputFieldsPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        
-        gbc.insets = new Insets(3, 5, 3, 5); 
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        
-        // 품목 목록
-        Vector<String> items = new Vector<>(itemPoints.keySet());
-        items.insertElementAt(DEFAULT_SELECTION_TEXT, 0);
+    private Map<String, Integer> initializeItemPoints() {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        map.put("종이", 15);
+        map.put("비닐", 10);
+        map.put("유리병", 25);
+        map.put("종이팩", 20);
+        map.put("캔ㆍ고철", 40);
+        map.put("스티로폼", 10);
+        map.put("플라스틱", 10);
+        map.put("기타", 5); 
+        return map;
+    }
 
-        // 1. "품목" Label
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.3; 
-        inputFieldsPanel.add(new JLabel("품목", SwingConstants.LEFT), gbc);
+    private void createUILayout() {
+        setLayout(new BorderLayout(10, 10));
         
-        // 2. 품목 선택 (ComboBox)
-        gbc.gridx = 1; gbc.weightx = 0.7; 
-        itemComboBox = new JComboBox<>(items);
-        itemComboBox.setFont(KOREAN_FONT);
+        // 1. 왼쪽 패널 
+        JPanel leftPanel = createInputPanel();
+        leftPanel.setPreferredSize(new Dimension(200, 400)); 
+
+        // 2. 오른쪽 패널 
+        JPanel rightPanelContainer = new JPanel(new BorderLayout());
+        rightPanelContainer.setPreferredSize(new Dimension(350, 400));
+        
+        // 2-1. 제목 레이블 추가 
+        JLabel titleLabel = new JLabel("분리수거 목록", SwingConstants.CENTER);
+        titleLabel.setFont(KOREAN_BOLD_FONT.deriveFont(Font.BOLD, 20)); 
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
+
+        // 2-2. 목록 패널 생성
+        JPanel currentLogPanel = createCurrentLogPanel(); 
+        currentLogPanel.setBorder(BorderFactory.createEmptyBorder(0, 5, 5, 5));
+
+        rightPanelContainer.add(titleLabel, BorderLayout.NORTH);
+        rightPanelContainer.add(currentLogPanel, BorderLayout.CENTER);
+        
+        // 3. 전체 레이아웃 배치
+        add(leftPanel, BorderLayout.WEST);
+        add(rightPanelContainer, BorderLayout.CENTER);
+        
+        // 초기 합계 행 추가
+        calculateTotalPoints(); 
+    }
+    
+    private JPanel createInputPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 10, 20, 10)); 
+        
+        // 콤보박스 초기화
+        itemComboBox = new JComboBox<>(itemPoints.keySet().toArray(new String[0]));
+        itemComboBox.insertItemAt(DEFAULT_SELECTION_TEXT, 0);
         itemComboBox.setSelectedIndex(0);
-        itemComboBox.addActionListener(e -> updatePointLabel());
-        inputFieldsPanel.add(itemComboBox, gbc);
+        itemComboBox.setFont(KOREAN_FONT);
+        itemComboBox.setMaximumSize(new Dimension(200, 30)); 
+        
+        itemComboBox.setRenderer(new CenterAlignedRenderer());
 
-        // 3. "예상 포인트" Label
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.3;
-        inputFieldsPanel.add(new JLabel("예상 포인트", SwingConstants.LEFT), gbc);
-        
-        // 4. 포인트 정보 (오른쪽 정렬)
-        gbc.gridx = 1; gbc.weightx = 0.7;
-        pointLabel = new JLabel("0", SwingConstants.RIGHT); 
-        pointLabel.setFont(new Font("맑은 고딕", Font.BOLD, 12));
-        pointLabel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(Color.GRAY), 
-            BorderFactory.createEmptyBorder(1, 5, 1, 5) 
-        ));
-        pointLabel.setBackground(Color.WHITE);
-        pointLabel.setOpaque(true);
-        inputFieldsPanel.add(pointLabel, gbc);
-        
-        // 5. 버튼
+        pointLabel = new JLabel("선택 포인트: 0 P", SwingConstants.CENTER);
+        pointLabel.setFont(KOREAN_FONT);
+        pointLabel.setAlignmentX(Component.CENTER_ALIGNMENT); 
+
         addButton = new JButton("목록에 추가");
-        addButton.setFont(BUTTON_FONT); 
-        addButton.setEnabled(false);
-        addButton.addActionListener(this::handleAddItem);
-        
-        // 6. 버튼 영역을 별도의 패널로 구성 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0)); 
-        buttonPanel.add(addButton);
-        
-        // 7. GridBagLayout에 버튼을 추가합니다. 
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; 
-        gbc.fill = GridBagConstraints.NONE; 
-        gbc.insets = new Insets(5, 5, 0, 5); 
-        gbc.anchor = GridBagConstraints.EAST; 
-        inputFieldsPanel.add(buttonPanel, gbc);
-        
+        addButton.setFont(KOREAN_BOLD_FONT);
+        addButton.addActionListener(e -> addRecycleItemToTable((String)itemComboBox.getSelectedItem()));
+        addButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        addButton.setMaximumSize(new Dimension(200, 40));
 
-        panel.add(inputFieldsPanel); 
 
+        panel.add(Box.createVerticalGlue()); 
+        
+        panel.add(itemComboBox);
+ 
+        panel.add(Box.createVerticalStrut(25)); 
+        panel.add(pointLabel);
+    
+        panel.add(Box.createVerticalStrut(25)); 
+        panel.add(addButton);
+        
+        panel.add(Box.createVerticalGlue()); 
+        
+        itemComboBox.addActionListener(e -> {
+            String selectedItem = (String) itemComboBox.getSelectedItem();
+            int point = (selectedItem == null || selectedItem.equals(DEFAULT_SELECTION_TEXT)) 
+                        ? 0 
+                        : itemPoints.getOrDefault(selectedItem, 0);
+            pointLabel.setText("선택 포인트: " + point + " P");
+        });
+        
         return panel;
     }
-
-
-    private JPanel createCurrentListPanel() {
-        JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createEmptyBorder(2, 5, 2, 5), 
-            "분리수거 목록"
-        ));
-
-        // JTable 설정
-        tableModel = new DefaultTableModel(COLUMN_NAMES, 0) {
+    
+    private JPanel createCurrentLogPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        
+        tableModel = new DefaultTableModel(CURRENT_LOG_COLUMN_NAMES, 0) {
             @Override
-            public boolean isCellEditable(int row, int column) { return false; }
-            @Override
-            public Class<?> getColumnClass(int columnIndex) {
-                if (columnIndex == 0) return Integer.class;
-                return super.getColumnClass(columnIndex);
+            public boolean isCellEditable(int row, int column) {
+                return false;
             }
         };
         currentTable = new JTable(tableModel);
         currentTable.setFont(KOREAN_FONT);
-        currentTable.setRowHeight(18); 
-        currentTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        currentTable.setRowHeight(25);
+        currentTable.getTableHeader().setFont(KOREAN_BOLD_FONT);
         
-        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer() {
-            @Override
-            public Component getTableCellRendererComponent(JTable table, Object value,
-                                                          boolean isSelected, boolean hasFocus,
-                                                          int row, int column) {
-                Component comp = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-                
-                ((JLabel) comp).setHorizontalAlignment(SwingConstants.CENTER);
-                
+        currentTable.setDefaultRenderer(Object.class, new TotalRowRenderer());
+        
+        JScrollPane scrollPane = new JScrollPane(currentTable);
 
-                if ("합계".equals(table.getValueAt(row, 1))) {
-                    comp.setFont(comp.getFont().deriveFont(Font.BOLD, 12f)); 
-                    comp.setBackground(new Color(240, 248, 255)); 
-                    comp.setForeground(Color.BLACK); 
-                } else {
-                    comp.setFont(table.getFont());
-                    comp.setBackground(Color.WHITE);
-                }
-                
-                if (isSelected) {
-                    comp.setBackground(currentTable.getSelectionBackground());
-                    comp.setForeground(currentTable.getSelectionForeground());
-                }
-                
-                return comp;
+        // 버튼 패널
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        removeButton = new JButton("선택 항목 제거");
+        saveButton = new JButton("포인트 얻기 (저장)");
+        saveButton.addActionListener(this::handleSaveLogs); 
+
+        removeButton.addActionListener(e -> {
+            int selectedRow = currentTable.getSelectedRow();
+         
+            if (selectedRow != -1 && selectedRow < tableModel.getRowCount() - 1) {
+                tableModel.removeRow(selectedRow);
+         
+                renumberSequence();
+                calculateTotalPoints();
+            } else if (selectedRow == tableModel.getRowCount() - 1) {
+                 JOptionPane.showMessageDialog(this, "합계 행은 제거할 수 없습니다.", "경고", JOptionPane.WARNING_MESSAGE);
+            } else {
+                 JOptionPane.showMessageDialog(this, "제거할 항목을 선택해주세요.", "경고", JOptionPane.WARNING_MESSAGE);
             }
-        };
+        });
 
-        for (int i = 0; i < currentTable.getColumnCount(); i++) {
-            currentTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
-        }
-        
-        // 컬럼 너비 설정
-        currentTable.getColumnModel().getColumn(0).setPreferredWidth(10); 
-        currentTable.getColumnModel().getColumn(1).setPreferredWidth(20); 
-        currentTable.getColumnModel().getColumn(2).setPreferredWidth(10); 
-        currentTable.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN); 
-
-
-        panel.add(new JScrollPane(currentTable), BorderLayout.CENTER);
-
-        // 버튼 영역
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 3)); 
-        removeButton = new JButton("선택 삭제");
-        removeButton.setFont(KOREAN_FONT);
-        removeButton.addActionListener(this::handleRemoveItem);
-        saveButton = new JButton("포인트 얻기");
-        saveButton.setFont(KOREAN_FONT);
-        saveButton.addActionListener(this::handleSaveLogs);
-
-        buttonPanel.add(removeButton);
+        buttonPanel.add(removeButton); 
         buttonPanel.add(saveButton);
+        
+        panel.add(scrollPane, BorderLayout.CENTER);
         panel.add(buttonPanel, BorderLayout.SOUTH);
-
         return panel;
     }
     
-
-    private void updatePointLabel() {
-        String selectedItem = (String) itemComboBox.getSelectedItem();
-        
-        if (selectedItem != null && !selectedItem.equals(DEFAULT_SELECTION_TEXT)) {
-            int point = itemPoints.getOrDefault(selectedItem, 0);
-            pointLabel.setText(String.valueOf(point)); 
-            addButton.setEnabled(true);
-        } else {
-            pointLabel.setText("0");
-            addButton.setEnabled(false);
-        }
-    }
+    private void renumberSequence() {
     
-    private void handleAddItem(ActionEvent e) {
-        String selectedItem = (String) itemComboBox.getSelectedItem();
-        
-        if (selectedItem == null || selectedItem.equals(DEFAULT_SELECTION_TEXT)) {
-            return;
-        }
-
-        // 중복 체크 (합계 행 제외)
         int dataRowCount = tableModel.getRowCount();
-        if (dataRowCount > 0 && "합계".equals(tableModel.getValueAt(dataRowCount - 1, 1))) {
-            dataRowCount -= 1;
+        if (dataRowCount > 0 && tableModel.getValueAt(dataRowCount - 1, 1).equals("합계")) {
+            dataRowCount--;
         }
 
-        for (int i = 0; i < dataRowCount; i++) { 
-            if (selectedItem.equals(tableModel.getValueAt(i, 1))) {
-                JOptionPane.showMessageDialog(this,
-                        "품목 **" + selectedItem + "**은 이미 목록에 추가되었습니다.",
-                        "중복 항목",
-                        JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-        }
-
-        int point = itemPoints.getOrDefault(selectedItem, 0);
-        
-        // 합계 행이 있으면 제거하고 데이터 행 추가
-        if (tableModel.getRowCount() > 0 && "합계".equals(tableModel.getValueAt(tableModel.getRowCount() - 1, 1))) {
-             tableModel.removeRow(tableModel.getRowCount() - 1);
-        }
-
-        int newRowNumber = tableModel.getRowCount() + 1;
-        tableModel.addRow(new Object[]{
-            newRowNumber,   
-            selectedItem,   
-            point + "P"     
-        });
-        
-        totalPoint += point;
-        updateTotalRow();
-        
-        itemComboBox.setSelectedIndex(0);
-        updatePointLabel(); 
-    }
-
-    private void handleRemoveItem(ActionEvent e) {
-        int selectedIndex = currentTable.getSelectedRow();
-        
-        if (selectedIndex == -1 || "합계".equals(tableModel.getValueAt(selectedIndex, 1))) { 
-            JOptionPane.showMessageDialog(this, "제거할 항목을 선택해주세요.", "경고", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        String pointStr = tableModel.getValueAt(selectedIndex, 2).toString().replace("P", "").trim();
-        int point = Integer.parseInt(pointStr);
-        totalPoint -= point;
-        
-        // 합계 행을 먼저 제거
-        if (tableModel.getRowCount() > 0 && "합계".equals(tableModel.getValueAt(tableModel.getRowCount() - 1, 1))) {
-            tableModel.removeRow(tableModel.getRowCount() - 1);
-        }
-        
-        tableModel.removeRow(selectedIndex);
-        
-        updateRowNumbers(); 
-        updateTotalRow();   
-    }
-    
-    private void updateRowNumbers() {
-        int limit = tableModel.getRowCount();
-        if (limit > 0 && "합계".equals(tableModel.getValueAt(limit - 1, 1))) {
-            limit -= 1;
-        }
-        
-        for (int i = 0; i < limit; i++) {
+        for (int i = 0; i < dataRowCount; i++) {
+       
             tableModel.setValueAt(i + 1, i, 0); 
         }
     }
 
+    // 목록에 품목 추가 
+    private void addRecycleItemToTable(String itemName) {
+        if (itemName == null || itemName.equals(DEFAULT_SELECTION_TEXT)) {
+            return;
+        }
 
-    private void updateTotalRow() {
-        // 이미 합계 행이 있으면 제거 (업데이트를 위해)
-        if (tableModel.getRowCount() > 0 && "합계".equals(tableModel.getValueAt(tableModel.getRowCount() - 1, 1))) {
+        int point = itemPoints.getOrDefault(itemName, 0);
+        
+  
+        if (tableModel.getRowCount() > 0) {
             tableModel.removeRow(tableModel.getRowCount() - 1);
         }
 
-        // 새로운 합계 행 추가
-        tableModel.addRow(new Object[]{
-            null,           
-            "합계",         
-            totalPoint + "P" 
-        });
+  
+        Vector<Object> row = new Vector<>();
+
+        row.add(tableModel.getRowCount() + 1); 
+        row.add(itemName);
+    
+        row.add(point + "P"); 
+        tableModel.addRow(row);
+        
+  
+        renumberSequence();
+        calculateTotalPoints(); 
     }
 
+    // 테이블의 합계 업데이트 
+    private void calculateTotalPoints() {
 
+        if (tableModel.getRowCount() > 0 && tableModel.getValueAt(tableModel.getRowCount() - 1, 1).equals("합계")) {
+            tableModel.removeRow(tableModel.getRowCount() - 1);
+        }
+
+        totalPoint = 0;
+ 
+        for (int i = 0; i < tableModel.getRowCount(); i++) {
+            Object pointValue = tableModel.getValueAt(i, 2);
+            
+            if (pointValue instanceof String) {
+                try {
+            
+                    totalPoint += Integer.parseInt(((String) pointValue).replace("P", "").trim());
+                } catch (NumberFormatException ignored) {
+             
+                }
+            }
+        }
+        
+        tableModel.addRow(new Vector<>(List.of(
+            "", "합계", totalPoint + "P" 
+        )));
+    }
+    
+    private void clearTable() {
+    
+        int rowCount = tableModel.getRowCount();
+        if (rowCount > 0) {
+         
+            tableModel.removeRow(rowCount - 1);
+       
+            for (int i = rowCount - 2; i >= 0; i--) {
+                tableModel.removeRow(i);
+            }
+        }
+        totalPoint = 0;
+        calculateTotalPoints(); 
+    }
+
+    private void loadTodayRecycleLogs() {
+    
+    }
+
+  
     private void handleSaveLogs(ActionEvent e) {
+        if (logDAO == null) {
+             JOptionPane.showMessageDialog(this, "DB 연결 오류로 기능을 사용할 수 없습니다.", "오류", JOptionPane.ERROR_MESSAGE);
+             return;
+        }
+
         if (tableModel.getRowCount() <= 1) { 
             JOptionPane.showMessageDialog(this, "저장할 분리수거 품목이 없습니다.", "경고", JOptionPane.WARNING_MESSAGE);
             return;
@@ -365,7 +308,6 @@ public class RecyclePanel extends JPanel {
 
         List<String> itemsToSave = new ArrayList<>();
         
-        // 합계 행 제외하고 품목 목록 추출
         for (int i = 0; i < tableModel.getRowCount() - 1; i++) {
             String itemName = (String) tableModel.getValueAt(i, 1);
             itemsToSave.add(itemName);
@@ -376,20 +318,75 @@ public class RecyclePanel extends JPanel {
             
             String message;
             if (earnedPoints > 0) {
-                 message = "총 " + itemsToSave.size() + "건의 기록이 저장되었습니다.\n" +
-                           "새로운 항목에 대해 총 **" + earnedPoints + " 포인트**가 적립되었습니다.";
+                 message = String.format("총 %d건의 기록이 저장되었습니다.\n새로운 항목에 대해 총 **%d 포인트**가 적립되었습니다.", itemsToSave.size(), earnedPoints);
             } else {
-                 message = "총 " + itemsToSave.size() + "건의 기록이 저장되었으나, 이미 오늘 적립된 항목이거나 포인트가 0점인 항목입니다.";
+                 message = String.format("총 %d건의 기록이 저장되었으나, 이미 오늘 적립된 품목이거나 포인트가 0점인 항목입니다. (획득 포인트: 0 P)", itemsToSave.size());
             }
             
             JOptionPane.showMessageDialog(this, message, "저장 완료", JOptionPane.INFORMATION_MESSAGE);
             
-
-            loadTodayRecycleLogs();
+            // ⭐ 테이블 초기화 로직 제거/주석 처리
+            // clearTable();
             
-        } catch (Exception ex) {
-            System.err.println("로그 저장 중 DB 오류: " + ex.getMessage());
-            JOptionPane.showMessageDialog(this, "기록 저장 중 DB 오류가 발생했습니다: " + ex.getMessage(), "오류", JOptionPane.ERROR_MESSAGE);
+        } catch (SQLException ex) { 
+            System.err.println("분리수거 로그 저장 및 포인트 적립 DB 오류: " + ex.getMessage());
+            JOptionPane.showMessageDialog(this, "DB 오류로 저장 및 포인트 적립에 실패했습니다: " + ex.getMessage(), "오류", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) { // 일반 Exception 처리
+            System.err.println("시스템 오류: " + ex.getMessage());
+            JOptionPane.showMessageDialog(this, "시스템 오류로 저장 및 포인트 적립에 실패했습니다: " + ex.getMessage(), "오류", JOptionPane.ERROR_MESSAGE);
         }
     }
+    
+    private class TotalRowRenderer extends DefaultTableCellRenderer {
+        
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value,
+                                                         boolean isSelected, boolean hasFocus,
+                                                         int row, int column) {
+            
+   
+            setHorizontalAlignment(SwingConstants.CENTER);
+            
+         
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+       
+            if (row == table.getRowCount() - 1) {
+            
+                c.setBackground(TOTAL_ROW_BACKGROUND);
+                
+                c.setFont(KOREAN_BOLD_FONT);
+                
+                if (!isSelected) {
+                    c.setForeground(table.getForeground()); 
+                }
+
+            } else {
+               
+                c.setBackground(table.getBackground());
+                c.setFont(KOREAN_FONT);
+                
+       
+                if (!isSelected) {
+                    c.setForeground(table.getForeground()); 
+                }
+            }
+
+            return c;
+        }
+    }
+	private class CenterAlignedRenderer extends DefaultListCellRenderer {
+	        
+	        @Override
+	        public Component getListCellRendererComponent(JList<?> list, Object value, int index, 
+	                                                      boolean isSelected, boolean cellHasFocus) {
+	            // 기본 렌더링 컴포넌트(JLabel)를 가져옵니다.
+	            JLabel renderer = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+	            
+	            // 텍스트를 가운데 정렬로 설정합니다.
+	            renderer.setHorizontalAlignment(CENTER);
+	            
+	            return renderer;
+	        }
+	}
 }

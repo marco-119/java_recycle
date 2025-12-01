@@ -9,13 +9,12 @@ public class UserDTO {
     private final int attendanceStreak; 
     private final boolean isAdmin;      
 
-    // 기존 생성자 
+     
     public UserDTO(String userId, String nickname, int balancePoints, int totalPoints) {
         this(userId, nickname, balancePoints, totalPoints, 0, false);
     }
     
-    //신규 생성자 
-     
+   
     public UserDTO(String userId, String nickname, int balancePoints, int totalPoints, int attendanceStreak, boolean isAdmin) {
         this.userId = userId;
         this.nickname = nickname;

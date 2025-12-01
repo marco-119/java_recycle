@@ -9,7 +9,6 @@ public class RecycleLogDTO {
     private final int quantity;
     private final int points;
 
-    // --- 1. 전체 필드 생성자  ---
     public RecycleLogDTO(int logId, String logDate, String itemName, int quantity, int points) {
         this.logId = logId;
         this.logDate = logDate;
@@ -18,7 +17,6 @@ public class RecycleLogDTO {
         this.points = points;
     }
     
-    // --- 2. Getter 메서드  ---
     
     public int getLogId() {
         return logId;
