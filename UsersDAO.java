@@ -165,9 +165,9 @@ public class UsersDAO {
     }
     
     // ---------------------------------------------------------------
-    // 5. 퀴즈/출석체크 결과 저장 (updateQuizResult) - UPDATE
+    // 5. 회원 포인트 및 정보 수정 (퀴즈, 분리수거, 구매 공용) - UPDATE
     // ---------------------------------------------------------------
-    public void updateQuizResult(UsersDTO user) {
+    public void updateUserPoint(UsersDTO user) {
         Connection conn = null;
         PreparedStatement pstmt = null;
 
@@ -177,56 +177,26 @@ public class UsersDAO {
             conn = getConnection();
             pstmt = conn.prepareStatement(sql);
 
-            pstmt.setInt(1, user.getTotalPoints());      
-            pstmt.setInt(2, user.getBalancePoints());    
-            pstmt.setInt(3, user.getAttendanceStreak()); 
-            pstmt.setString(4, user.getUserId());        
+            pstmt.setInt(1, user.getTotalPoints());      // 누적 포인트
+            pstmt.setInt(2, user.getBalancePoints());    // 보유 포인트
+            pstmt.setInt(3, user.getAttendanceStreak()); // 연속 출석 횟수
+            pstmt.setString(4, user.getUserId());        // 해당 유저 ID
 
             int result = pstmt.executeUpdate();
             if (result > 0) {
-                System.out.println("퀴즈 결과 저장 완료");
+                System.out.println("회원 정보(포인트/스트릭) 업데이트 완료");
             }
 
         } catch (SQLException e) {
             e.printStackTrace();
-            System.out.println("퀴즈 결과 저장 실패");
-        } finally {
-            close(conn, pstmt, null);
-        }
-    }
-
-    // ---------------------------------------------------------------
-    // 6. 분리수거 포인트 적립 (updateRecyclePoints) - UPDATE
-    // ---------------------------------------------------------------
-    public void updateRecyclePoints(UsersDTO user) {
-        Connection conn = null;
-        PreparedStatement pstmt = null;
-
-        String sql = "UPDATE USERS SET TOTAL_POINTS = ?, BALANCE_POINTS = ? WHERE USER_ID = ?";
-
-        try {
-            conn = getConnection();
-            pstmt = conn.prepareStatement(sql);
-
-            pstmt.setInt(1, user.getTotalPoints());   
-            pstmt.setInt(2, user.getBalancePoints()); 
-            pstmt.setString(3, user.getUserId());     
-
-            int result = pstmt.executeUpdate();
-            if (result > 0) {
-                System.out.println("분리수거 포인트 적립 완료");
-            }
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-            System.out.println("분리수거 포인트 적립 실패");
+            System.out.println("회원 정보 업데이트 실패");
         } finally {
             close(conn, pstmt, null);
         }
     }
     
     // ---------------------------------------------------------------
-    // 7. 전체 랭킹 조회 (getRankings) - SELECT
+    // 6. 전체 랭킹 조회 (getRankings) - SELECT
     // ---------------------------------------------------------------
     public List<UsersDTO> getRankings() {
         List<UsersDTO> rankList = new ArrayList<>();
@@ -257,7 +227,7 @@ public class UsersDAO {
     }
 
     // ---------------------------------------------------------------
-    // 8. 회원 탈퇴 (deleteUser) - DELETE
+    // 7. 회원 탈퇴 (deleteUser) - DELETE
     // ---------------------------------------------------------------
     public void deleteUser(String userId) {
         Connection conn = null;
